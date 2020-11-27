@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+#
+# curl -s --head http://url-file | grep Last-Modified
+#
+import requests
+import sys
+import os
+import datetime
+import time
+import pytz
+
+def utc_to_jst_str(timestamp_utc):
+	#datetime_utc = datetime.datetime.strptime(timestamp_utc, "%a, %d %b %Y %H:%M:%S %Z")   # %Z が無効なので下記で対応.
+	datetime_utc = datetime.datetime.strptime(timestamp_utc, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=pytz.utc)
+	datetime_jst = datetime_utc.astimezone(datetime.timezone(datetime.timedelta(hours=+9), 'JST'))
+	print(datetime.datetime.strftime(datetime_jst, "%a, %d %b %Y %H:%M:%S %Z"))
+	timestamp_jst_str = datetime.datetime.strftime(datetime_jst, '%Y%m%d%H%M.%S')  # touch -t "" filename
+	return timestamp_jst_str
+
+def utc_to_jst_time(timestamp_utc):
+	#datetime_utc = datetime.datetime.strptime(timestamp_utc, "%a, %d %b %Y %H:%M:%S %Z")   # %Z が無効なので下記で対応.
+	datetime_utc = datetime.datetime.strptime(timestamp_utc, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=pytz.utc)
+	datetime_jst = datetime_utc.astimezone(datetime.timezone(datetime.timedelta(hours=+9), 'JST'))
+	timestamp_jst_str = datetime.datetime.strftime(datetime_jst, "%Y%m%d%H%M.%S")
+	#print(timestamp_jst_str)					# 202002122300.25
+	JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
+	#print(time.mktime(datetime.datetime.strptime(timestamp_jst_str, "%Y%m%d%H%M.%S").replace(tzinfo=JST).timetuple()))
+	return time.mktime(datetime.datetime.strptime(timestamp_jst_str, "%Y%m%d%H%M.%S").replace(tzinfo=JST).timetuple())
+
+count = 0;
+for url in sys.argv:
+	if count > 0:
+		print(url)
+		filename = os.path.basename(url)
+		#print(filename)
+		res = requests.head(url)
+		#for  key in res.headers,keys():
+		#    if key == 'Last-Modified':
+		if 'Last-Modified' in res.headers:
+			tstamp_string = res.headers['Last-Modified']
+		elif 'Location' in res.headers:
+			url = res.headers['Location']
+			res = requests.head(url)
+			tstamp_string = res.headers['Last-Modified']
+		#elif 'Date' in res.headers:
+		#	tstamp_string = res.headers['Date']
+		else:
+			print("Not found Last-Modified key in URL header!!")
+			sys.exit()
+		print(tstamp_string)
+		#print('touch -t "' + utc_to_jst_str(res.headers['Last-Modified']) + '" ' + filename)
+		#atime = mtime = utc_to_jst_time(res.headers['Last-Modified'])
+		print('touch -t "' + utc_to_jst_str(tstamp_string) + '" ' + filename)
+		atime = mtime = utc_to_jst_time(tstamp_string)
+		#print(atime)
+		if not os.path.exists(filename):
+			with open(filename, "wb") as f:
+				f.write(requests.get(url).content)
+		os.utime(filename, (atime, mtime))
+	count += 1
